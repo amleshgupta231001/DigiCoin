@@ -461,49 +461,45 @@ const getBotResponse = (captcha, difficulty) => {
 
 
 
-// Premium matchmaking logic
+
 // const createGame = async (req, res) => {
 //   try {
 //     const { captchaDifficulty = 'easy' } = req.body;
 //     const user = req.user;
+ 
+//     if (!user || !user._id) {
+//       throw new Error('User authentication failed');
+//     }
 
-//     console.log(`[${new Date().toISOString()}] [CREATE GAME] User ${user._id} (${user.name}) requesting ${captchaDifficulty} game`);
+//     console.log(`[${new Date().toISOString()}] [CREATE GAME] User ${user._id} requesting ${captchaDifficulty} game`);
+
+//     // Ensure the queue exists for this difficulty
+//     if (!gameQueue[captchaDifficulty]) {
+//       gameQueue[captchaDifficulty] = new Map();
+//     }
 
 //     // Check if user is already in queue
-//     for (const difficulty in gameQueue) {
-//       if (gameQueue[difficulty].has(user._id.toString())) {
-//         const queueTime = gameQueue[difficulty].get(user._id.toString());
-//         console.warn(`[DUPLICATE QUEUE] User ${user._id} already in ${difficulty} queue since ${queueTime}`);
-//         return res.status(400).json({ error: `You're already in ${difficulty} queue` });
-//       }
+//     if (gameQueue[captchaDifficulty].has(user._id.toString())) {
+//       return res.status(400).json({ error: 'You are already in queue' });
 //     }
 
 //     // Check if user is in any active game
-//     for (const [gameId, game] of activeGames) {
+//     for (const [_, game] of activeGames) {
 //       if (game.player1 === user._id.toString() || game.player2 === user._id.toString()) {
-//         console.warn(`[ACTIVE GAME] User ${user._id} already in game ${gameId}`);
-//         return res.status(400).json({ 
-//           error: 'You are already in a game',
-//           gameId,
-//           opponent: game.player1 === user._id.toString() ? game.player2 : game.player1,
-//           status: game.status
-//         });
+//         return res.status(400).json({ error: 'You are already in a game' });
 //       }
 //     }
 
-//     // Add user to queue with timestamp
+//     // Add user to queue
 //     gameQueue[captchaDifficulty].set(user._id.toString(), new Date());
-//     console.log(`[QUEUE ADDED] User ${user._id} added to ${captchaDifficulty} queue`);
 
 //     // Immediate matchmaking check
 //     if (gameQueue[captchaDifficulty].size >= 2) {
-//       const [player1Id, player2Id] = Array.from(gameQueue[captchaDifficulty].keys()).slice(0, 2);
+//       const [player1Id, player2Id] = Array.from(gameQueue[captchaDifficulty].keys());
       
 //       // Remove both players from queue
 //       gameQueue[captchaDifficulty].delete(player1Id);
 //       gameQueue[captchaDifficulty].delete(player2Id);
-      
-//       console.log(`[MATCH FOUND] Players ${player1Id} and ${player2Id} matched for ${captchaDifficulty} game`);
       
 //       // Create the game
 //       const game = new Game({
@@ -527,9 +523,8 @@ const getBotResponse = (captcha, difficulty) => {
 //         captchas: []
 //       });
       
-//       console.log(`[GAME STARTED] Game ${game._id} created between ${player1Id} and ${player2Id}`);
 //       return res.json({ 
-//         message: 'Game started with real player!', 
+//         message: 'Game started!', 
 //         gameId: game._id,
 //         opponent: player1Id === user._id.toString() ? player2Id : player1Id,
 //         difficulty: captchaDifficulty,
@@ -539,11 +534,8 @@ const getBotResponse = (captcha, difficulty) => {
 
 //     // Set timeout for bot matchmaking (10 seconds)
 //     const botTimeout = setTimeout(async () => {
-//       if (gameQueue[captchaDifficulty].has(user._id.toString())) {
-//         // Remove from queue
+//       if (gameQueue[captchaDifficulty]?.has(user._id.toString())) {
 //         gameQueue[captchaDifficulty].delete(user._id.toString());
-        
-//         console.log(`[BOT MATCH] No opponent found for user ${user._id} in 10s. Creating bot game...`);
         
 //         // Create game with bot
 //         const bot = BOTS[captchaDifficulty];
@@ -553,13 +545,12 @@ const getBotResponse = (captcha, difficulty) => {
 //           player2Name: bot.name,
 //           isBotGame: true,
 //           botDifficulty: captchaDifficulty,
-//           status: 'active',
+//           status: 'active', 
 //           startTime: new Date()
 //         });
         
 //         await game.save();
         
-//         // Generate first captcha
 //         const captcha = generateCaptcha(captchaDifficulty);
 //         activeGames.set(game._id.toString(), {
 //           ...game.toObject(),
@@ -571,34 +562,25 @@ const getBotResponse = (captcha, difficulty) => {
 //           botResponseTimer: null
 //         });
         
-//         console.log(`[BOT GAME STARTED] Game ${game._id} created between ${user._id} and bot ${bot.name}`);
-        
-//         // Set up bot response simulation
 //         simulateBotResponse(game._id.toString(), captchaDifficulty);
 //       }
 //     }, 10000);
 
-//     // Clean up timeout on response
-//     res.on('finish', () => {
-//       if (res.statusCode !== 200) {
-//         clearTimeout(botTimeout);
-//         gameQueue[captchaDifficulty].delete(user._id.toString());
-//       }
-//     });
-
-//     console.log(`[WAITING] User ${user._id} waiting for ${captchaDifficulty} game (10s bot timeout set)`);
 //     res.json({ 
 //       message: 'Searching for opponent...', 
 //       difficulty: captchaDifficulty,
 //       queuePosition: gameQueue[captchaDifficulty].size,
 //       timeout: 10000
 //     });
-    
+
 //   } catch (error) {
-//     console.error(`[ERROR] createGame for user ${req.user?._id}:`, error);
-//     res.status(500).json({ error: 'Failed to create game', details: error.message });
+//     console.error('Error in createGame:', error);
+//     res.status(500).json({ error: error.message });
 //   }
 // };
+
+
+// Enhanced bot response simulation
 
 
 
@@ -621,18 +603,27 @@ const createGame = async (req, res) => {
 
     // Check if user is already in queue
     if (gameQueue[captchaDifficulty].has(user._id.toString())) {
-      return res.status(400).json({ error: 'You are already in queue' });
+      return res.status(400).json({ 
+        error: 'You are already in queue',
+        code: 'ALREADY_IN_QUEUE'
+      });
     }
 
     // Check if user is in any active game
     for (const [_, game] of activeGames) {
       if (game.player1 === user._id.toString() || game.player2 === user._id.toString()) {
-        return res.status(400).json({ error: 'You are already in a game' });
+        return res.status(400).json({ 
+          error: 'You are already in a game',
+          code: 'ALREADY_IN_GAME',
+          currentGameId: game._id.toString(),
+          opponent: game.player1 === user._id.toString() ? game.player2 : game.player1
+        });
       }
     }
 
-    // Add user to queue
+    // Add user to queue with timestamp
     gameQueue[captchaDifficulty].set(user._id.toString(), new Date());
+    const queuePosition = gameQueue[captchaDifficulty].size;
 
     // Immediate matchmaking check
     if (gameQueue[captchaDifficulty].size >= 2) {
@@ -664,14 +655,29 @@ const createGame = async (req, res) => {
         captchas: []
       });
       
+      // Return success response with all necessary data
       return res.json({ 
-        message: 'Game started!', 
+        success: true,
+        message: 'Game started with real player!',
         gameId: game._id,
         opponent: player1Id === user._id.toString() ? player2Id : player1Id,
         difficulty: captchaDifficulty,
-        isBot: false
+        isBot: false,
+        queuePosition: 0, // No queue since match was immediate
+        timeout: 0,
+        gameStatus: 'active'
       });
     }
+
+    // Create a temporary game document for the waiting player
+    const tempGame = new Game({
+      player1: user._id,
+      status: 'waiting',
+      captchaDifficulty,
+      createdAt: new Date()
+    });
+    
+    await tempGame.save();
 
     // Set timeout for bot matchmaking (10 seconds)
     const botTimeout = setTimeout(async () => {
@@ -690,6 +696,7 @@ const createGame = async (req, res) => {
           startTime: new Date()
         });
         
+        await Game.findByIdAndDelete(tempGame._id); // Remove temp game
         await game.save();
         
         const captcha = generateCaptcha(captchaDifficulty);
@@ -707,19 +714,44 @@ const createGame = async (req, res) => {
       }
     }, 10000);
 
+    // Clean up timeout if request fails
+    res.on('finish', () => {
+      if (res.statusCode !== 200) {
+        clearTimeout(botTimeout);
+        gameQueue[captchaDifficulty].delete(user._id.toString());
+        Game.findByIdAndDelete(tempGame._id).catch(console.error);
+      }
+    });
+
+    // Return waiting response with all queue information
     res.json({ 
+      success: true,
       message: 'Searching for opponent...', 
       difficulty: captchaDifficulty,
-      queuePosition: gameQueue[captchaDifficulty].size,
-      timeout: 10000
+      queuePosition,
+      timeout: 10000,
+      gameId: tempGame._id, // Return the temporary game ID
+      isBot: false,
+      gameStatus: 'waiting'
     });
 
   } catch (error) {
     console.error('Error in createGame:', error);
-    res.status(500).json({ error: error.message });
+    
+    // Clean up any partial state
+    if (gameQueue[captchaDifficulty]?.has(user._id.toString())) {
+      gameQueue[captchaDifficulty].delete(user._id.toString());
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      code: 'CREATE_GAME_ERROR'
+    });
   }
 };
-// Enhanced bot response simulation
+
+
 const simulateBotResponse = (gameId, difficulty) => {
   if (!activeGames.has(gameId)) return;
   

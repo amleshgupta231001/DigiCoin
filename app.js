@@ -10,7 +10,7 @@ const { notFound, errorHandler } = require('./middleware/error');
 dotenv.config();
 
 // Connect to database
-connectDB();
+connectDB(); 
 
 const app = express();
 
