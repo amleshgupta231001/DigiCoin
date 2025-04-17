@@ -1,20 +1,19 @@
+
+
+///---------------
+
+
 const express = require('express');
-const router = express.Router();
 const gameController = require('../controllers/gameController');
-const auth = require('../middleware/auth');
+const authController = require('../controllers/authController');
 
-// Game management
-router.post('/create', auth, gameController.createGame);
-router.post('/join', auth, gameController.joinGame);
-router.post('/submit', auth, gameController.submitCaptcha);
-router.get('/status/:gameId', auth, gameController.getGameStatus);
+const router = express.Router();
 
-// Game history & stats
-router.get('/history', auth, gameController.getGameHistory);
-router.get('/leaderboard', auth, gameController.getLeaderboard);
-router.get('/stats/:userId', auth, gameController.getPlayerStats);
+// Protect all routes
+router.use(authController.protect);
 
-// Withdrawal
-router.post('/withdraw', auth, gameController.withdrawFunds);
+router.get('/captcha', gameController.getCaptcha);
+router.post('/submit', gameController.submitCaptcha);
+router.get('/stats', gameController.getGameStats);
 
 module.exports = router;

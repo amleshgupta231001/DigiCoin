@@ -1,16 +1,35 @@
+
+
 const mongoose = require('mongoose');
+const logger = require('../utils/logger');
+
+
 
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-    //   useNewUrlParser: true,
-    //   useUnifiedTopology: true,
-    });
-    console.log('MongoDB Connected...');
+    const conn = await mongoose.connect(
+      process.env.MONGODB_URI, // Local MongoDB connection from .env
+      {
+        useNewUrlParser: true,
+        useUnifiedTopology: true
+      }
+    );
+    logger.info(`MongoDB Connected: ${conn.connection.host}`);
   } catch (err) {
-    console.error('Database connection error:', err.message);
+    logger.error(`MongoDB Connection Error: ${err.message}`);
     process.exit(1);
   }
 };
 
-module.exports = connectDB;
+
+// Close DB connection gracefully
+const closeDB = async () => {
+  try {
+    await mongoose.connection.close();
+    logger.info('MongoDB connection closed');
+  } catch (err) {
+    logger.error('Error closing MongoDB connection:', err);
+  }
+};
+
+module.exports = { connectDB, closeDB };

@@ -1,114 +1,187 @@
-const jwt = require('jsonwebtoken');
+
+
+
+
+
+//////--------------
+
 const User = require('../models/User');
 const Wallet = require('../models/Wallet');
-const Game = require('../models/Game')
+const jwt = require('jsonwebtoken');
+const { promisify } = require('util');
+const logger = require('../utils/logger');
+const AppError = require('../utils/error');
+const { createToken, setTokenCookie } = require('../utils/auth');
 
-const register = async (req, res) => {
+// Sign token
+const signToken = id => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE
+  });
+};
+
+// Register new user
+exports.register = async (req, res, next) => {
   try {
-    const { email, password, name, mobile } = req.body;
+    const { name, email, password, mobile, referralCode } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // Check if user exists
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { mobile }] 
+    });
+    
     if (existingUser) {
-      return res.status(400).json({ error: 'Email already in use' });
+      return next(new AppError('User with this email or mobile already exists', 400));
     }
 
-    // Create new user
-    const user = new User({ email, password, name, mobile });
-    await user.save();
+    // Check referral code if provided
+    let referredBy = null;
+    if (referralCode) {
+      const referrer = await User.findOne({ referralCode });
+      if (!referrer) {
+        return next(new AppError('Invalid referral code', 400));
+      }
+      referredBy = referrer._id;
+    }
 
-    // Create wallet with 200 coins
-    const wallet = new Wallet({ user: user._id });
-    await wallet.save();
+    // Create user
+    const user = await User.create({
+      name,
+      email,
+      password,
+      mobile,
+      referredBy
+    });
+
+    // Create wallet for user
+    const wallet = await Wallet.createWallet(user._id);
+
+    // Add signup bonus (50 coins)
+    await wallet.addFunds(50, 'Signup bonus');
+
+    // Add referral bonus if applicable
+    if (referredBy) {
+      const referrerWallet = await Wallet.findOne({ user: referredBy });
+      await referrerWallet.addFunds(25, 'Referral bonus');
+      await wallet.addFunds(25, 'Referral bonus');
+    }
 
     // Generate token
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: '7d',
+    const token = signToken(user._id);
+    setTokenCookie(res, token);
+
+    // Remove sensitive data
+    user.password = undefined;
+
+    res.status(201).json({
+      status: 'success',
+      token,
+      data: {
+        user,
+        wallet
+      }
     });
 
-    res.status(201).json({ token, user: { id: user._id, name: user.name, email: user.email } });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    logger.error(`Registration error: ${err.message}`);
+    next(err);
   }
 };
 
-const login = async (req, res) => {
+// Login user
+exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const { emailOrMobile, password } = req.body;
+
+    // 1) Check if email/mobile and password exist
+    if (!emailOrMobile || !password) {
+      return next(new AppError('Please provide email/mobile and password', 400));
+    }
+
+    // 2) Check if user exists and password is correct
+    const user = await User.findOne({
+      $or: [
+        { email: emailOrMobile },
+        { mobile: emailOrMobile }
+      ]
+    }).select('+password');
 
     if (!user || !(await user.comparePassword(password))) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return next(new AppError('Incorrect email/mobile or password', 401));
     }
 
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
+    // 3) Generate token
+    const token = signToken(user._id);
+    setTokenCookie(res, token);
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: '7d',
+    // 4) Get user's wallet
+    const wallet = await Wallet.findOne({ user: user._id });
+
+    // 5) Remove sensitive data
+    user.password = undefined;
+
+    res.status(200).json({
+      status: 'success',
+      token,
+      data: {
+        user,
+        wallet
+      }
     });
 
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    logger.error(`Login error: ${err.message}`);
+    next(err);
   }
 };
 
-
-
-const getProfile = async (req, res) => {
+// Get current user
+exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
-    const wallet = await Wallet.findOne({ user: req.user._id });
+    const user = await User.findById(req.user.id);
+    const wallet = await Wallet.findOne({ user: req.user.id });
 
-    if (!user || !wallet) {
-      return res.status(404).json({ error: 'User not found' });
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user,
+        wallet
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Protect routes
+exports.protect = async (req, res, next) => {
+  try {
+    let token;
+    
+    // 1) Get token from header or cookie
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.cookies.token) {
+      token = req.cookies.token;
     }
 
-    // Get game stats
-    const gamesPlayed = await Game.countDocuments({
-      $or: [{ player1: user._id }, { player2: user._id }],
-      status: 'completed',
-    });
+    if (!token) {
+      return next(new AppError('You are not logged in! Please log in to get access.', 401));
+    }
 
-    const gamesWon = await Game.countDocuments({
-      winner: user._id,
-      status: 'completed',
-    });
+    // 2) Verify token
+    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
 
-    res.json({
-      user,
-      wallet: {
-        coins: wallet.coins,
-        balance: wallet.balance
-      },
-      stats: {
-        gamesPlayed,
-        gamesWon,
-        winRate: gamesPlayed > 0 ? Math.round((gamesWon / gamesPlayed) * 100) : 0,
-      },
-    });
-  } catch (error) {
-    console.error('Profile error:', error);
-    res.status(500).json({ error: 'Failed to fetch profile' });
+    // 3) Check if user still exists
+    const currentUser = await User.findById(decoded.id);
+    if (!currentUser) {
+      return next(new AppError('The user belonging to this token no longer exists.', 401));
+    }
+
+    // 4) Grant access to protected route
+    req.user = currentUser;
+    next();
+  } catch (err) {
+    next(err);
   }
 };
-
-// Logout function
-const logout = (req, res) => {
-  try {
-    // Clear the JWT cookie (if you're using cookies)
-    res.clearCookie('token', { httpOnly: true });
-
-    // You can also invalidate the token server-side, if you're keeping a token blacklist.
-    // Example: Add logic to blacklist the token or remove it from your active sessions.
-
-    res.status(200).json({ message: 'Logged out successfully' });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ error: 'Failed to log out' });
-  }
-};
-
-module.exports = { register, login, getProfile, logout };

@@ -1,112 +1,127 @@
+
+
+// ///------------
+
 // const mongoose = require('mongoose');
 
-// const GameSchema = new mongoose.Schema({
-//   player1: {
-//     type: mongoose.Schema.Types.ObjectId,
+// const gameSchema = new mongoose.Schema({
+//   user: {
+//     type: mongoose.Schema.ObjectId,
 //     ref: 'User',
-//     required: true,
+//     required: [true, 'Game session must belong to a user']
 //   },
-//   player2: {
-//     type: mongoose.Schema.Types.ObjectId,
-//     ref: 'User',
-//   },
-//   status: {
+//   captcha: {
 //     type: String,
-//     enum: ['waiting', 'active', 'completed', 'cancelled'],
-//     default: 'waiting',
+//     required: [true, 'Game session must have a captcha']
 //   },
-//   captchaDifficulty: {
-//     type: String,
-//     enum: ['easy', 'medium', 'hard'],
-//     default: 'easy',
+//   userInput: {
+//     type: String
 //   },
-//   captchas: [
-//     {
-//       value: String,
-//       answeredBy: mongoose.Schema.Types.ObjectId,
-//       isCorrect: Boolean,
-//       timestamp: Date,
-//     },
-//   ],
-//   startTime: Date,
-//   endTime: Date,
-//   winner: {
-//     type: mongoose.Schema.Types.ObjectId,
-//     ref: 'User',
+//   isCompleted: {
+//     type: Boolean,
+//     default: false
+//   },
+//   isCorrect: {
+//     type: Boolean
+//   },
+//   reward: {
+//     type: Number,
+//     default: 0
+//   },
+//   attempts: {
+//     type: Number,
+//     default: 1
 //   },
 //   createdAt: {
 //     type: Date,
-//     default: Date.now,
+//     default: Date.now
 //   },
+//   completedAt: {
+//     type: Date
+//   }
 // });
 
-// module.exports = mongoose.model('Game', GameSchema);
+// // Calculate completion time
+// gameSchema.pre('save', function(next) {
+//   if (this.isModified('isCompleted') && this.isCompleted) {
+//     this.completedAt = new Date();
+//   }
+//   next();
+// });
+
+// // Indexes for faster queries
+// gameSchema.index({ user: 1 });
+// gameSchema.index({ isCompleted: 1 });
+// gameSchema.index({ createdAt: -1 });
+
+// module.exports = mongoose.model('Game', gameSchema);
 
 
 
 
 
-
-
-
-
+///////working with timer 7 second 
 const mongoose = require('mongoose');
 
-const GameSchema = new mongoose.Schema({
-  player1: {
-    type: mongoose.Schema.Types.ObjectId,
+const gameSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.ObjectId,
     ref: 'User',
-    required: true,
+    required: [true, 'Game session must belong to a user']
   },
-  player2: {
-    type: mongoose.Schema.Types.Mixed, // Changed to Mixed to allow both ObjectId and string
-    ref: 'User',
+  captcha: {
+    type: String,
+    required: [true, 'Game session must have a captcha']
   },
-  isBotGame: {
+  userInput: {
+    type: String
+  },
+  isCompleted: {
     type: Boolean,
-    default: false,
+    default: false
   },
-  botDifficulty: {
-    type: String,
-    enum: ['easy', 'medium', 'hard'],
+  isCorrect: {
+    type: Boolean,
+    default: false
   },
-  status: {
-    type: String,
-    enum: ['waiting', 'active', 'completed', 'cancelled'],
-    default: 'waiting',
-  },
-  captchaDifficulty: {
-    type: String,
-    enum: ['easy', 'medium', 'hard'],
-    default: 'easy',
-  },
-  captchas: [
-    {
-      value: String,
-      answeredBy: mongoose.Schema.Types.Mixed, // Changed to Mixed
-      answer: String,
-      isCorrect: Boolean,
-      responseTime: Number,
-      timestamp: Date,
-    },
-  ],
-  player1Score: {
+  reward: {
     type: Number,
-    default: 0,
+    default: 0
   },
-  player2Score: {
+  attempts: {
     type: Number,
-    default: 0,
+    default: 1
   },
-  startTime: Date,
-  endTime: Date,
-  winner: {
-    type: mongoose.Schema.Types.Mixed, // Changed to Mixed
-  },
-  createdAt: {
+  createdAt: {  
     type: Date,
-    default: Date.now,
+    default: Date.now
   },
+  completedAt: {
+    type: Date
+  },
+  startTime: {
+    type: Date // Captcha game start time
+  },
+  endTime: {
+    type: Date // Captcha game end time
+  },
+  timeLimit: {
+    type: Number,
+    default: 7 // 7 seconds time limit for solving the captcha
+  }
 });
 
-module.exports = mongoose.model('Game', GameSchema);
+// Calculate completion time (when game is marked as completed)
+gameSchema.pre('save', function(next) {
+  if (this.isModified('isCompleted') && this.isCompleted) {
+    this.completedAt = new Date();
+  }
+  next();
+});
+
+// Indexes for faster queries
+gameSchema.index({ user: 1 });
+gameSchema.index({ isCompleted: 1 });
+gameSchema.index({ createdAt: -1 });
+
+module.exports = mongoose.model('Game', gameSchema);
