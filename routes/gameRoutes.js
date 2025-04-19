@@ -1,6 +1,6 @@
 
 
-///---------------
+///---------------gameRoutes
 
 
 const express = require('express');
