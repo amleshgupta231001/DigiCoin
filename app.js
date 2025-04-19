@@ -184,6 +184,10 @@ connectDB();
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
+
+// Add this after the middleware section
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.set('trust proxy', 1);
 
 // 2) Security middleware
