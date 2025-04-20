@@ -49,6 +49,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.set('trust proxy', 1);
 
 
+
+// Add this after the middleware section
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.set('trust proxy', 1);
+
+
 // 2) Security middleware
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',

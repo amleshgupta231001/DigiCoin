@@ -61,6 +61,7 @@
 
 
 ///////working with timer 7 second 
+//game models
 const mongoose = require('mongoose');
 
 const gameSchema = new mongoose.Schema({

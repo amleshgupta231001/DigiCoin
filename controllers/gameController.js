@@ -1,9 +1,5 @@
 
-
-// ////---------------
-
-////// working without timer 7 second
-
+// ///////working with timer 7 second 
 // const Game = require('../models/Game');
 // const Wallet = require('../models/Wallet');
 // const User = require('../models/User');
@@ -11,11 +7,11 @@
 // const AppError = require('../utils/error');
 // const logger = require('../utils/logger');
 
-// // Get random captcha
+// // Get random captcha with timer
 // exports.getCaptcha = async (req, res, next) => {
 //   try {
 //     const user = req.user;
-    
+
 //     // Check if user has pending captcha
 //     const pendingCaptcha = await Game.findOne({
 //       user: user._id,
@@ -36,17 +32,21 @@
 //     const randomIndex = Math.floor(Math.random() * captchas.length);
 //     const captcha = captchas[randomIndex];
 
-//     // Create new game session
+//     // Create new game session with timer (start time)
 //     const gameSession = await Game.create({
 //       user: user._id,
-//       captcha
+//       captcha,
+//       startTime: new Date(), // Captcha game starts now
+//       timeLimit: 7  // 7 seconds to solve
 //     });
 
 //     res.status(200).json({
 //       status: 'success',
 //       data: {
 //         captcha: gameSession.captcha,
-//         isPending: false
+//         isPending: false,
+//         startTime: gameSession.startTime,
+//         timeLimit: gameSession.timeLimit
 //       }
 //     });
 
@@ -56,7 +56,7 @@
 //   }
 // };
 
-// // Submit captcha
+// // Submit captcha with timer check
 // exports.submitCaptcha = async (req, res, next) => {
 //   try {
 //     const { captcha, userInput } = req.body;
@@ -77,12 +77,30 @@
 //       return next(new AppError('No active captcha session found', 404));
 //     }
 
+//     // Calculate elapsed time (in seconds)
+//     const elapsedTime = (new Date() - gameSession.startTime) / 1000; // time in seconds
+
+//     // Check if time limit is exceeded
+//     if (elapsedTime > gameSession.timeLimit) {
+//       gameSession.isCompleted = true;
+//       gameSession.isCorrect = false;
+//       gameSession.userInput = userInput;
+//       gameSession.attempts = req.body.attempts || 1;
+//       await gameSession.save();
+
+//       return res.status(400).json({
+//         status: 'failed',
+//         message: `Time's up! You took too long to complete the captcha.`
+//       });
+//     }
+
 //     // Check if captcha is correct
 //     const isCorrect = captcha === userInput;
 //     gameSession.isCompleted = true;
 //     gameSession.isCorrect = isCorrect;
 //     gameSession.userInput = userInput;
 //     gameSession.attempts = req.body.attempts || 1;
+//     gameSession.endTime = new Date(); // Add end time once the user submits the captcha
 
 //     await gameSession.save();
 
@@ -125,7 +143,7 @@
 //   }
 // };
 
-// // Get game stats
+// // Get game stats (same as before)
 // exports.getGameStats = async (req, res, next) => {
 //   try {
 //     const user = req.user;
@@ -211,6 +229,7 @@
 //     next(err);
 //   }
 // };
+ 
 
 
 
@@ -220,6 +239,9 @@
 
 ///////working with timer 7 second 
 ////////...........gameController
+
+// new changes code starts
+
 const Game = require('../models/Game');
 const Wallet = require('../models/Wallet');
 const User = require('../models/User');
@@ -256,8 +278,8 @@ exports.getCaptcha = async (req, res, next) => {
     const gameSession = await Game.create({
       user: user._id,
       captcha,
-      startTime: new Date(), // Captcha game starts now
-      timeLimit: 7  // 7 seconds to solve
+      startTime: new Date(),
+      timeLimit: 20  // 7 seconds to solve
     });
 
     res.status(200).json({
@@ -298,7 +320,7 @@ exports.submitCaptcha = async (req, res, next) => {
     }
 
     // Calculate elapsed time (in seconds)
-    const elapsedTime = (new Date() - gameSession.startTime) / 1000; // time in seconds
+    const elapsedTime = (new Date() - gameSession.startTime) / 1000;
 
     // Check if time limit is exceeded
     if (elapsedTime > gameSession.timeLimit) {
@@ -320,7 +342,7 @@ exports.submitCaptcha = async (req, res, next) => {
     gameSession.isCorrect = isCorrect;
     gameSession.userInput = userInput;
     gameSession.attempts = req.body.attempts || 1;
-    gameSession.endTime = new Date(); // Add end time once the user submits the captcha
+    gameSession.endTime = new Date();
 
     await gameSession.save();
 
@@ -331,31 +353,29 @@ exports.submitCaptcha = async (req, res, next) => {
         return next(new AppError('Wallet not found', 404));
       }
 
-      // Check if user completed 5 captchas
-      const completedCaptchas = await Game.countDocuments({
-        user: user._id,
-        isCompleted: true,
-        isCorrect: true,
-        createdAt: { 
-          $gte: new Date(new Date().setHours(0, 0, 0, 0)) 
+      // Reward 10 coins for each correct captcha
+      await wallet.addFunds(10, 'Captcha game reward');
+      
+      // Check if user has earned any rupees from the coin conversion
+      const updatedWallet = await Wallet.findOne({ user: user._id });
+      const rupeesEarned = updatedWallet.realMoneyBalance - (wallet.realMoneyBalance || 0);
+      
+      res.status(200).json({
+        status: 'success',
+        data: {
+          isCorrect,
+          coinsReward: 10,
+          rupeesEarned: rupeesEarned > 0 ? rupeesEarned : 0
         }
       });
-
-      // Reward 10 coins for every 5 correct captchas
-      if (completedCaptchas % 5 === 0) {
-        await wallet.addFunds(10, 'Captcha game reward');
-        gameSession.reward = 10;
-        await gameSession.save();
-      }
+    } else {
+      res.status(200).json({
+        status: 'success',
+        data: {
+          isCorrect
+        }
+      });
     }
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        isCorrect,
-        reward: gameSession.reward || 0
-      }
-    });
 
   } catch (err) {
     logger.error(`Submit captcha error: ${err.message}`);
@@ -363,10 +383,16 @@ exports.submitCaptcha = async (req, res, next) => {
   }
 };
 
-// Get game stats (same as before)
+// Get game stats (updated to show both coins and rupees)
 exports.getGameStats = async (req, res, next) => {
   try {
     const user = req.user;
+
+    // Get wallet to include current balances
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return next(new AppError('Wallet not found', 404));
+    }
 
     // Today's stats
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
@@ -385,13 +411,12 @@ exports.getGameStats = async (req, res, next) => {
       createdAt: { $gte: todayStart, $lte: todayEnd }
     });
 
-    const todayEarnings = await Game.aggregate([
+    const todayCoinEarnings = await Game.aggregate([
       {
         $match: {
           user: user._id,
           isCompleted: true,
           isCorrect: true,
-          reward: { $gt: 0 },
           createdAt: { $gte: todayStart, $lte: todayEnd }
         }
       },
@@ -420,8 +445,8 @@ exports.getGameStats = async (req, res, next) => {
             { $match: { isCorrect: true } },
             { $count: 'count' }
           ],
-          totalEarnings: [
-            { $match: { isCorrect: true, reward: { $gt: 0 } } },
+          totalCoinEarnings: [
+            { $match: { isCorrect: true } },
             { $group: { _id: null, total: { $sum: '$reward' } } }
           ]
         }
@@ -431,15 +456,21 @@ exports.getGameStats = async (req, res, next) => {
     res.status(200).json({
       status: 'success',
       data: {
+        wallet: {
+          coinBalance: wallet.balance,
+          realMoneyBalance: wallet.realMoneyBalance,
+          totalEarned: wallet.totalEarned,
+          totalWithdrawn: wallet.totalWithdrawn
+        },
         today: {
           completed: todayCompleted,
           correct: todayCorrect,
-          earnings: todayEarnings.length ? todayEarnings[0].total : 0
+          coinsEarned: todayCoinEarnings.length ? todayCoinEarnings[0].total : 0
         },
         allTime: {
           completed: allTimeStats[0].totalCompleted.length ? allTimeStats[0].totalCompleted[0].count : 0,
           correct: allTimeStats[0].totalCorrect.length ? allTimeStats[0].totalCorrect[0].count : 0,
-          earnings: allTimeStats[0].totalEarnings.length ? allTimeStats[0].totalEarnings[0].total : 0
+          coinsEarned: allTimeStats[0].totalCoinEarnings.length ? allTimeStats[0].totalCoinEarnings[0].total : 0
         }
       }
     });
