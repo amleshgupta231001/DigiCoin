@@ -188,7 +188,7 @@
 
 
 
-
+////// authController.js
 const User = require('../models/User');
 const Wallet = require('../models/Wallet');
 const jwt = require('jsonwebtoken');
